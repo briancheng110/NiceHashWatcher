@@ -2,7 +2,8 @@ import json
 import requests
 import sys
 import statistics
-
+import time
+from datetime import datetime
 
 # we need 5 things to make a full calculation:
 # Hashpower market price, BTC exchange rate, network hashrate, block time, and reward per block
@@ -11,11 +12,13 @@ import statistics
 WTMPage = json.loads(requests.get('https://whattomine.com/coins/1.json').text)
 btcExchange = float(WTMPage['exchange_rate'])
 
-CoinList = ['DASH', 'HNS','ERG', 'XMR', 'BTC', 'AE', 'ETH', 'BEAM', 'ZEC', 'BTG', 'CFX', 'RVN', 'BCD']
+CoinList = ['DASH', 'HNS','ERG', 'XMR', 'BTC', 'AE', 'ETH', 'BEAM', 'ZEC', 'BTG', 'CFX', 'RVN', 'BCD', 'BCH', 'BSV']
 marketList = ['USA_E', 'EU', 'USA', 'EU_N']
 CoinUrlFile = 'File'
 CoinFeeFile = 'Fees'
-usdInvestment = 100
+outputFile = 'Output.csv'
+loopTime = 1 #looping time in seconds
+usdInvestment = 250
 btcInvestment = usdInvestment / btcExchange
 #btcInvestment = 0.004
 
@@ -101,65 +104,87 @@ with open(CoinFeeFile) as File:
 inputMoney = deductFees('Investment', Coin, btcInvestment)
 print(inputMoney)        
 
-for Coin in CoinList:
-#for Coin in CoinList:
-    NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
-    scaleFactor = NHPage['stats']['EU']['marketFactor']
-    priceStats = []
+
     
-    
-# This section will copy all orders to a new dictionary
-# Looks for 3 orders where rigsCount = 0. This determines minimum price
-#for Coin in CoinList:
-    for Market in marketList:
-        Orders = {}
-        Orders.update({Market: {}})
+# We are ready to begin pulling and calculating
+# Enter infinite loop to repeatedly pull data from NH and WTM
+# Also perform 1 time file setup
+with open(outputFile, mode='w') as csvOutput:
+    csvOutput.write('Time,')
+    for Coin in CoinList:
+        csvOutput.write(str(Coin) + ',')
+    csvOutput.write('\n')
+
+#file is closed after each operation and re-opened prn -- avoids file locking for other programs
+
+while 0<1:
+    print('----------- ' + str(datetime.now()) + ' -----------')
+    for Coin in CoinList:
         NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
+        scaleFactor = NHPage['stats']['EU']['marketFactor']
+        # This section will copy all orders to a new dictionary
+        # Looks for 3 orders where rigsCount = 0. This determines minimum price
+        #for Coin in CoinList:
         
-        try:
-            CoinData[Coin]['marketScale'] = float(NHPage['stats'][Market]['marketFactor'])
-        except KeyError:
-            continue
-        
-        for i in range(len(NHPage['stats'][Market]['orders'])):
-            Orders[Market].update({i: {'price': float(NHPage['stats'][Market]['orders'][i]['price']), 'activeRigs': int(NHPage['stats'][Market]['orders'][i]['rigsCount'])}})
+        priceStats = []
+        for Market in marketList:
+            Orders = {}
+            Orders.update({Market: {}})
+            NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
             
-            if Orders[Market][i]['activeRigs'] > 0:
-                priceStats.append(Orders[Market][i]['price'])
-            #print(priceStats)
+            try:
+                CoinData[Coin]['marketScale'] = float(NHPage['stats'][Market]['marketFactor'])
+            except KeyError:
+                continue
+            
+            for i in range(len(NHPage['stats'][Market]['orders'])):
+                Orders[Market].update({i: {'price': float(NHPage['stats'][Market]['orders'][i]['price']), 'activeRigs': int(NHPage['stats'][Market]['orders'][i]['rigsCount'])}})
+                
+                if Orders[Market][i]['activeRigs'] > 0:
+                    priceStats.append(Orders[Market][i]['price'])
+                #print(priceStats)
 
-    # marketPrice is determined here
-    priceStats.sort()
-    CoinData[Coin]['marketPrice'] = statistics.median(priceStats)
-    
-    
-# Fill in necessary variables from whattomine.com
-# Also outsource profit calc to WTM
+        # marketPrice is determined here
+        priceStats.sort()
+        CoinData[Coin]['marketPrice'] = statistics.median(priceStats)
+        
+        
+    # Fill in necessary variables from whattomine.com
+    # Also outsource profit calc to WTM
+        calcHashrate = (inputMoney / CoinData[Coin]['marketPrice']) * CoinData[Coin]['marketScale']
+        CoinData[Coin]['WTMUrl'] += '&hr=' + str(round(calcHashrate / CoinData[Coin]['WTMRateScale'], 2))
+        
+        WTMPage = json.loads(requests.get(CoinData[Coin]['WTMUrl']).text)
+        CoinData[Coin]['exchangeRate'] = float(WTMPage['exchange_rate'])
 
+        # Special clause for BTC -- set to 1
+        if Coin == 'BTC':
+            CoinData[Coin]['exchangeRate'] = 1
 
-    calcHashrate = (inputMoney / CoinData[Coin]['marketPrice']) * CoinData[Coin]['marketScale']
-    CoinData[Coin]['WTMUrl'] += '&hr=' + str(round(calcHashrate / CoinData[Coin]['WTMRateScale'], 2))
-    
-    WTMPage = json.loads(requests.get(CoinData[Coin]['WTMUrl']).text)
-    CoinData[Coin]['exchangeRate'] = float(WTMPage['exchange_rate'])
-    # Special clause for BTC -- set to 1
-    if Coin == 'BTC':
-        CoinData[Coin]['exchangeRate'] = 1
+        CoinData[Coin]['networkHR'] = float(WTMPage['nethash'])
+        CoinData[Coin]['blockTime'] = float(WTMPage['block_time'])
+        CoinData[Coin]['blockReward'] = float(WTMPage['block_reward'])
+        CoinData[Coin]['difficulty'] = float(WTMPage['difficulty'])
+        CoinData[Coin]['volume'] = float(WTMPage['exchange_rate_vol'])
+        
+        #deduct fees from native currency
+        nativeMined = float(WTMPage['estimated_rewards'].replace(',',''))
+        nativeMined = deductFees('Native', Coin, nativeMined)
 
-    CoinData[Coin]['networkHR'] = float(WTMPage['nethash'])
-    CoinData[Coin]['blockTime'] = float(WTMPage['block_time'])
-    CoinData[Coin]['blockReward'] = float(WTMPage['block_reward'])
-    CoinData[Coin]['difficulty'] = float(WTMPage['difficulty'])
-    CoinData[Coin]['volume'] = float(WTMPage['exchange_rate_vol'])
-    
-    #deduct fees from native currency
-    nativeMined = float(WTMPage['estimated_rewards'].replace(',',''))
-    nativeMined = deductFees('Native', Coin, nativeMined)
+        #deduct fees from final amount    
+        btcMined = nativeMined * CoinData[Coin]['exchangeRate']
+        btcMined = deductFees('Final', Coin, btcMined)
+        
+        CoinData[Coin]['Profit'] = (btcMined - btcInvestment) * btcExchange
+        print(Coin, '$' + str(round(CoinData[Coin]['Profit'], 2)), CoinData[Coin]['marketPrice'], round(CoinData[Coin]['Profit'] / usdInvestment * 100, 2), calcHashrate)
 
-    #deduct fees from final amount    
-    btcMined = nativeMined * CoinData[Coin]['exchangeRate']
-    btcMined = deductFees('Final', Coin, btcMined)
-    
-    CoinData[Coin]['Profit'] = (btcMined - btcInvestment) * btcExchange
-    print(Coin, '$' + str(round(CoinData[Coin]['Profit'], 2)), CoinData[Coin]['marketPrice'], round(CoinData[Coin]['Profit'] / usdInvestment * 100, 2), calcHashrate)
+    # write current iteration data, then close
+    with open(outputFile, mode='a') as csvOutput:
+        csvOutput.write(str(datetime.now()) + ',')
+        for Coin in CoinList:
+            csvOutput.write(str(round(CoinData[Coin]['Profit'],2)) + ',')
+        csvOutput.write('\n')
+        # explicit buffer flushing unnecessary -- flushed on close
+
+    time.sleep(loopTime)
     
