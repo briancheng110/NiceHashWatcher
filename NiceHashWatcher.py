@@ -14,10 +14,11 @@ btcExchange = float(WTMPage['exchange_rate'])
 
 CoinList = ['DASH', 'HNS','ERG', 'XMR', 'BTC', 'AE', 'ETH', 'BEAM', 'ZEC', 'BTG', 'CFX', 'RVN', 'BCD', 'BCH', 'BSV']
 marketList = ['USA_E', 'EU', 'USA', 'EU_N']
+attributeList = ['ProfitBTC','NativeMined','ExchangeRate','MyHashrate','NetworkHashrate','Difficulty','MarketPrice']
 CoinUrlFile = 'File'
 CoinFeeFile = 'Fees'
 outputFile = 'Output.csv'
-loopTime = 1 #looping time in seconds
+loopTime = 90 #looping time in seconds
 usdInvestment = 250
 btcInvestment = usdInvestment / btcExchange
 #btcInvestment = 0.004
@@ -41,7 +42,7 @@ def deductFees(targetLocation, Coin, Amount):
     return Amount
 
 for Coin in CoinList:
-    CoinData.update({Coin: {'WTMUrl': "", 'NHUrl': "", 'WTMRateScale' : 0, 'difficulty': 0.0, 'volume': 0.0, 'marketPrice' : 100.0, 'marketScale' : 0, 'exchangeRate' : 0.0, 'networkHR' : 0, 'blockTime' : 0, 'blockReward' : 0, 'Profit' : 0, 'Fees' : {}} })
+    CoinData.update({Coin: {'WTMUrl': "", 'NHUrl': "", 'WTMRateScale' : 0, 'difficulty': 0.0, 'volume': 0.0, 'marketPrice' : 100.0, 'marketScale' : 0, 'exchangeRate' : 0.0, 'calcHashRate': 0.0, 'networkHR' : 0, 'blockTime' : 0, 'nativeMined': 0.0, 'blockReward' : 0, 'profitBTC': 0.0, 'profitUSD' : 0.0, 'Fees' : {}} })
     
 # read file for urls for each coin
 with open(CoinUrlFile) as File:
@@ -112,13 +113,16 @@ print(inputMoney)
 with open(outputFile, mode='w') as csvOutput:
     csvOutput.write('Time,')
     for Coin in CoinList:
-        csvOutput.write(str(Coin) + ',')
+            for Attribute in attributeList:
+                csvOutput.write(Coin + '_' + Attribute + ',')
     csvOutput.write('\n')
 
 #file is closed after each operation and re-opened prn -- avoids file locking for other programs
 
 while 0<1:
-    print('----------- ' + str(datetime.now()) + ' -----------')
+    Now = datetime.now()
+    timeNow = Now.strftime("%x %H:%M:%S")
+    print('----------- ' + str(timeNow) + ' -----------')
     for Coin in CoinList:
         NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
         scaleFactor = NHPage['stats']['EU']['marketFactor']
@@ -130,8 +134,13 @@ while 0<1:
         for Market in marketList:
             Orders = {}
             Orders.update({Market: {}})
-            NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
-            
+            while(True):
+                try:
+                    NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
+                except:
+                    print("NH page failed to load, retrying")
+                else:
+                    break
             try:
                 CoinData[Coin]['marketScale'] = float(NHPage['stats'][Market]['marketFactor'])
             except KeyError:
@@ -152,9 +161,16 @@ while 0<1:
     # Fill in necessary variables from whattomine.com
     # Also outsource profit calc to WTM
         calcHashrate = (inputMoney / CoinData[Coin]['marketPrice']) * CoinData[Coin]['marketScale']
+        CoinData[Coin]['calcHashRate'] = calcHashrate
         CoinData[Coin]['WTMUrl'] += '&hr=' + str(round(calcHashrate / CoinData[Coin]['WTMRateScale'], 2))
-        
-        WTMPage = json.loads(requests.get(CoinData[Coin]['WTMUrl']).text)
+        while(True):
+            try:
+                WTMPage = json.loads(requests.get(CoinData[Coin]['WTMUrl']).text)
+            except:
+                print("WTM page failed to load, retrying")
+            else:
+                break
+
         CoinData[Coin]['exchangeRate'] = float(WTMPage['exchange_rate'])
 
         # Special clause for BTC -- set to 1
@@ -170,19 +186,27 @@ while 0<1:
         #deduct fees from native currency
         nativeMined = float(WTMPage['estimated_rewards'].replace(',',''))
         nativeMined = deductFees('Native', Coin, nativeMined)
+        CoinData[Coin]['nativeMined'] = nativeMined
 
         #deduct fees from final amount    
         btcMined = nativeMined * CoinData[Coin]['exchangeRate']
         btcMined = deductFees('Final', Coin, btcMined)
         
-        CoinData[Coin]['Profit'] = (btcMined - btcInvestment) * btcExchange
-        print(Coin, '$' + str(round(CoinData[Coin]['Profit'], 2)), CoinData[Coin]['marketPrice'], round(CoinData[Coin]['Profit'] / usdInvestment * 100, 2), calcHashrate)
+        CoinData[Coin]['profitBTC'] = btcMined - btcInvestment
+        CoinData[Coin]['profitUSD'] = (btcMined - btcInvestment) * btcExchange
+        print(Coin, 'Profit: ' + str(round(CoinData[Coin]['profitBTC'], 8)), CoinData[Coin]['marketPrice'], round(CoinData[Coin]['profitBTC'] / btcInvestment * 100, 2), calcHashrate)
 
     # write current iteration data, then close
     with open(outputFile, mode='a') as csvOutput:
-        csvOutput.write(str(datetime.now()) + ',')
+        csvOutput.write(str(timeNow) + ',')
         for Coin in CoinList:
-            csvOutput.write(str(round(CoinData[Coin]['Profit'],2)) + ',')
+            csvOutput.write(str(round(CoinData[Coin]['profitBTC'],8)) + ',')
+            csvOutput.write(str(round(CoinData[Coin]['nativeMined'],8)) + ',')
+            csvOutput.write(str(round(CoinData[Coin]['exchangeRate'],8)) + ',')
+            csvOutput.write(str(CoinData[Coin]['calcHashRate']) + ',')
+            csvOutput.write(str(CoinData[Coin]['networkHR']) + ',')
+            csvOutput.write(str(CoinData[Coin]['difficulty']) + ',')
+            csvOutput.write(str(CoinData[Coin]['marketPrice']) + ',')
         csvOutput.write('\n')
         # explicit buffer flushing unnecessary -- flushed on close
 
