@@ -4,29 +4,41 @@ import sys
 import statistics
 import time
 from datetime import datetime
+from scipy.stats import *
 
 # we need 5 things to make a full calculation:
 # Hashpower market price, BTC exchange rate, network hashrate, block time, and reward per block
 
-# get BTC to USD exchange rate
-WTMPage = json.loads(requests.get('https://whattomine.com/coins/1.json').text)
-btcExchange = float(WTMPage['exchange_rate'])
-
 CoinList = ['DASH', 'HNS','ERG', 'XMR', 'BTC', 'AE', 'ETH', 'BEAM', 'ZEC', 'BTG', 'CFX', 'RVN', 'BCD', 'BCH', 'BSV']
 marketList = ['USA_E', 'EU', 'USA', 'EU_N']
-attributeList = ['ProfitBTC','NativeMined','ExchangeRate','MyHashrate','NetworkHashrate','Difficulty','MarketPrice']
+attributeList = ['ProfitBTC','NativeMined','ExchangeRate','MyHashrate','NetworkHashrate','Difficulty','MarketPrice', 'MeanMarketPrice', 'SkewMarketPrice', 'KurtosisMarketPrice', 'SDMarketPrice', 'LowerQuartileMarketPrice', 'UpperQuartileMarketPrice']
 CoinUrlFile = 'File'
 CoinFeeFile = 'Fees'
 outputFile = 'Output.csv'
 loopTime = 90 #looping time in seconds
 usdInvestment = 250
-btcInvestment = usdInvestment / btcExchange
-#btcInvestment = 0.004
 
 #Declare dictonary structure for each coin
 CoinData = {}
 Orders = {}
 priceStats = []
+
+# safely retry HTML requests and parse as json
+def safeHTMLGet(Url):
+    while(True):
+        try:
+            page = requests.get(Url)
+        except:
+            print("Failed to fetch " + Url + ', retrying...')
+        else:
+            # sometimes NH sends us back garbage data, need secondary check
+            if page.status_code == 200:
+                break
+        time.sleep(5) # prevent spamming server with requests
+        
+    pageVar = json.loads(page.text)
+    return pageVar
+
 
 def deductFees(targetLocation, Coin, Amount):
     for FeeId in list(CoinData[Coin]['Fees'].keys()):
@@ -41,8 +53,15 @@ def deductFees(targetLocation, Coin, Amount):
                 
     return Amount
 
+# main ---------------------------------------------------------------------------------------------------------------------------------------
+# get BTC to USD exchange rate
+WTMPage = safeHTMLGet('https://whattomine.com/coins/1.json')
+btcExchange = float(WTMPage['exchange_rate'])
+#btcInvestment = usdInvestment / btcExchange
+btcInvestment = 0.005
+
 for Coin in CoinList:
-    CoinData.update({Coin: {'WTMUrl': "", 'NHUrl': "", 'WTMRateScale' : 0, 'difficulty': 0.0, 'volume': 0.0, 'marketPrice' : 100.0, 'marketScale' : 0, 'exchangeRate' : 0.0, 'calcHashRate': 0.0, 'networkHR' : 0, 'blockTime' : 0, 'nativeMined': 0.0, 'blockReward' : 0, 'profitBTC': 0.0, 'profitUSD' : 0.0, 'Fees' : {}} })
+    CoinData.update({Coin: {'MeanMarketPrice': 0.0, 'SkewMarketPrice': 0, 'KurotisisMarketPrice': 0, 'SDMarketPrice': 0, 'WTMUrl': "", 'LowerQuartileMarketPrice':0, 'UpperQuartileMarketPrice':0, 'WTMUrl_Base': "", 'NHUrl': "", 'WTMRateScale' : 0, 'difficulty': 0.0, 'volume': 0.0, 'marketPrice' : 100.0, 'marketScale' : 0, 'exchangeRate' : 0.0, 'calcHashRate': 0.0, 'networkHR' : 0, 'blockTime' : 0, 'nativeMined': 0.0, 'blockReward' : 0, 'profitBTC': 0.0, 'profitUSD' : 0.0, 'Fees' : {}} })
     
 # read file for urls for each coin
 with open(CoinUrlFile) as File:
@@ -60,7 +79,7 @@ with open(CoinUrlFile) as File:
     
         for Coin in CoinList:
             if ParsedLine[0] == Coin:
-                CoinData[Coin]['WTMUrl'] = 'https://whattomine.com/coins/' + ParsedLine[1] + '.json?fee=0.0&cost=0.0&p=0.0'
+                CoinData[Coin]['WTMUrl_Base'] = 'https://whattomine.com/coins/' + ParsedLine[1] + '.json?fee=0.0&cost=0.0&p=0.0'
                 CoinData[Coin]['NHUrl'] = 'https://api2.nicehash.com/main/api/v2/hashpower/orderBook?algorithm=' + ParsedLine[2].strip().upper()
                 CoinData[Coin]['WTMRateScale'] = 10 ** int(ParsedLine[3])
 
@@ -72,6 +91,7 @@ with open(CoinFeeFile) as File:
     
     for i in range(LineTotal):
         Line = File.readline()
+        
         if Line == '':
             break
         
@@ -110,37 +130,38 @@ print(inputMoney)
 # We are ready to begin pulling and calculating
 # Enter infinite loop to repeatedly pull data from NH and WTM
 # Also perform 1 time file setup
-with open(outputFile, mode='w') as csvOutput:
-    csvOutput.write('Time,')
-    for Coin in CoinList:
-            for Attribute in attributeList:
-                csvOutput.write(Coin + '_' + Attribute + ',')
-    csvOutput.write('\n')
+while(True):
+    try:
+        with open(outputFile, mode='a') as csvOutput:
+            csvOutput.write('Time,')
+            for Coin in CoinList:
+                    for Attribute in attributeList:
+                        csvOutput.write(Coin + '_' + Attribute + ',')
+            csvOutput.write('\n')
+    except PermissionError:
+        print("File is open in another program, waiting 10s to retry")
+    else:
+        break
+    
+
 
 #file is closed after each operation and re-opened prn -- avoids file locking for other programs
 
-while 0<1:
+while(True):
     Now = datetime.now()
     timeNow = Now.strftime("%x %H:%M:%S")
     print('----------- ' + str(timeNow) + ' -----------')
     for Coin in CoinList:
-        NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
+        NHPage = safeHTMLGet(CoinData[Coin]['NHUrl'])
         scaleFactor = NHPage['stats']['EU']['marketFactor']
         # This section will copy all orders to a new dictionary
-        # Looks for 3 orders where rigsCount = 0. This determines minimum price
-        #for Coin in CoinList:
-        
+       
         priceStats = []
         for Market in marketList:
             Orders = {}
             Orders.update({Market: {}})
-            while(True):
-                try:
-                    NHPage = json.loads(requests.get(CoinData[Coin]['NHUrl']).text)
-                except:
-                    print("NH page failed to load, retrying")
-                else:
-                    break
+            NHPage = safeHTMLGet(CoinData[Coin]['NHUrl'])
+
             try:
                 CoinData[Coin]['marketScale'] = float(NHPage['stats'][Market]['marketFactor'])
             except KeyError:
@@ -153,23 +174,33 @@ while 0<1:
                     priceStats.append(Orders[Market][i]['price'])
                 #print(priceStats)
 
-        # marketPrice is determined here
+        # marketPrice and stats are calculated here
         priceStats.sort()
-        CoinData[Coin]['marketPrice'] = statistics.median(priceStats)
-        
+        # if there is only a single order, don't bother with the stats
+        if len(priceStats) == 1:
+            CoinData[Coin]['marketPrice'] = priceStats[0]
+            CoinData[Coin]['MeanMarketPrice'] = priceStats[0]
+            CoinData[Coin]['SkewMarketPrice'] = 0
+            CoinData[Coin]['KurtosisMarketPrice'] = 0
+            CoinData[Coin]['SDMarketPrice'] = 0
+            CoinData[Coin]['LowerQuartileMarketPrice'] = priceStats[0]
+            CoinData[Coin]['UpperQuartileMarketPrice'] = priceStats[0]
+        else:
+            quartiles = statistics.quantiles(priceStats)
+            CoinData[Coin]['marketPrice'] = quartiles[1]
+            CoinData[Coin]['MeanMarketPrice'] = statistics.mean(priceStats)
+            CoinData[Coin]['SkewMarketPrice'] = skew(priceStats)
+            CoinData[Coin]['KurtosisMarketPrice'] = kurtosis(priceStats)
+            CoinData[Coin]['SDMarketPrice'] = statistics.stdev(priceStats)
+            CoinData[Coin]['LowerQuartileMarketPrice'] = quartiles[0]
+            CoinData[Coin]['UpperQuartileMarketPrice'] = quartiles[2]
         
     # Fill in necessary variables from whattomine.com
     # Also outsource profit calc to WTM
         calcHashrate = (inputMoney / CoinData[Coin]['marketPrice']) * CoinData[Coin]['marketScale']
         CoinData[Coin]['calcHashRate'] = calcHashrate
-        CoinData[Coin]['WTMUrl'] += '&hr=' + str(round(calcHashrate / CoinData[Coin]['WTMRateScale'], 2))
-        while(True):
-            try:
-                WTMPage = json.loads(requests.get(CoinData[Coin]['WTMUrl']).text)
-            except:
-                print("WTM page failed to load, retrying")
-            else:
-                break
+        CoinData[Coin]['WTMUrl'] = CoinData[Coin]['WTMUrl_Base'] + '&hr=' + str(round(calcHashrate / CoinData[Coin]['WTMRateScale'], 2))
+        WTMPage = safeHTMLGet(CoinData[Coin]['WTMUrl'])
 
         CoinData[Coin]['exchangeRate'] = float(WTMPage['exchange_rate'])
 
@@ -207,6 +238,12 @@ while 0<1:
             csvOutput.write(str(CoinData[Coin]['networkHR']) + ',')
             csvOutput.write(str(CoinData[Coin]['difficulty']) + ',')
             csvOutput.write(str(CoinData[Coin]['marketPrice']) + ',')
+            csvOutput.write(str(CoinData[Coin]['MeanMarketPrice']) + ',')
+            csvOutput.write(str(CoinData[Coin]['SkewMarketPrice']) + ',')
+            csvOutput.write(str(CoinData[Coin]['KurtosisMarketPrice']) + ',')
+            csvOutput.write(str(CoinData[Coin]['SDMarketPrice']) + ',')
+            csvOutput.write(str(CoinData[Coin]['LowerQuartileMarketPrice']) + ',')
+            csvOutput.write(str(CoinData[Coin]['UpperQuartileMarketPrice']) + ',')
         csvOutput.write('\n')
         # explicit buffer flushing unnecessary -- flushed on close
 
