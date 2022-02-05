@@ -58,7 +58,7 @@ def deductFees(targetLocation, Coin, Amount):
 WTMPage = safeHTMLGet('https://whattomine.com/coins/1.json')
 btcExchange = float(WTMPage['exchange_rate'])
 #btcInvestment = usdInvestment / btcExchange
-btcInvestment = 0.005
+btcInvestment = 0.006
 
 for Coin in CoinList:
     CoinData.update({Coin: {'MeanMarketPrice': 0.0, 'SkewMarketPrice': 0, 'KurotisisMarketPrice': 0, 'SDMarketPrice': 0, 'WTMUrl': "", 'LowerQuartileMarketPrice':0, 'UpperQuartileMarketPrice':0, 'WTMUrl_Base': "", 'NHUrl': "", 'WTMRateScale' : 0, 'difficulty': 0.0, 'volume': 0.0, 'marketPrice' : 100.0, 'marketScale' : 0, 'exchangeRate' : 0.0, 'calcHashRate': 0.0, 'networkHR' : 0, 'blockTime' : 0, 'nativeMined': 0.0, 'blockReward' : 0, 'profitBTC': 0.0, 'profitUSD' : 0.0, 'Fees' : {}} })
@@ -164,15 +164,21 @@ while(True):
 
             try:
                 CoinData[Coin]['marketScale'] = float(NHPage['stats'][Market]['marketFactor'])
+                totalMarketSpeed = float(NHPage['stats'][Market]['totalSpeed'])
             except KeyError:
                 continue
             
             for i in range(len(NHPage['stats'][Market]['orders'])):
-                Orders[Market].update({i: {'price': float(NHPage['stats'][Market]['orders'][i]['price']), 'activeRigs': int(NHPage['stats'][Market]['orders'][i]['rigsCount'])}})
+                Orders[Market].update({i: {'price': float(NHPage['stats'][Market]['orders'][i]['price']), 'speed': float(NHPage['stats'][Market]['orders'][i]['payingSpeed']), 'activeRigs': int(NHPage['stats'][Market]['orders'][i]['rigsCount'])}})
                 
                 if Orders[Market][i]['activeRigs'] > 0:
-                    priceStats.append(Orders[Market][i]['price'])
-                #print(priceStats)
+                    for x in range(Orders[Market][i]['activeRigs']):
+                        priceStats.append(Orders[Market][i]['price'])
+##        with open(Coin, mode='a') as csvOutput:
+##            for i in priceStats:
+##                csvOutput.write(str(i))
+##                csvOutput.write('\n')
+    ##                print(priceStats)
 
         # marketPrice and stats are calculated here
         priceStats.sort()
@@ -194,6 +200,9 @@ while(True):
             CoinData[Coin]['SDMarketPrice'] = statistics.stdev(priceStats)
             CoinData[Coin]['LowerQuartileMarketPrice'] = quartiles[0]
             CoinData[Coin]['UpperQuartileMarketPrice'] = quartiles[2]
+
+
+##            print(CoinData[Coin]['KurtosisMarketPrice'])
         
     # Fill in necessary variables from whattomine.com
     # Also outsource profit calc to WTM
