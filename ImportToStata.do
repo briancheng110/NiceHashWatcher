@@ -1,12 +1,13 @@
+include CoinInfo.do
 local Coins = "dash hns erg xmr btc ae eth beam zec btg cfx rvn bcd bch bsv"
 local Days = 5
 local Coin_to_analyze = "rvn"
 local funding_time_efficiency = 0.6 // estimated % of speed limit that is reached when funded
 local magic_number = 659670 // empirically determined exchange rate:market price ratio for breakeven
 
-import delim using "C:\Users\Brian\Desktop\Mining tools\NiceHashWatcher\Old\Output_old.csv", varn(1) clear numericcols(2/197)
+import delim using "C:\Users\Brian\Desktop\Mining tools\NiceHashWatcher\Output.csv", varn(1) clear numericcols(2/197)
 drop if time == "Time"
-drop v197
+drop v512
 
 quietly count
 local total_obs = r(N)
@@ -18,7 +19,7 @@ ren time2 time
 order time
 
 // generate market price tiers and speed limit adjustments
-quietly summarize `Coin_to_analyze'_marketprice
+//quietly summarize `Coin_to_analyze'_marketprice
 
 local max_price = round(r(max), 0.0001)
 local min_price = round(r(min), 0.0001)
@@ -47,12 +48,14 @@ forvalues tier = `min_price'(0.001)`max_price' {
 
 
 foreach Coin of local Coins {
-	gen `Coin'_profitpct = 100 * `Coin'_profitbtc / 0.005
+	gen `Coin'_profitpct = 100 * `Coin'_profitbtc / 0.006
 	//calculate relationship between network hashrate and difficulty
 	quietly regress `Coin'_networkhashrate `Coin'_difficulty
-	gen `Coin'_fmv = ((1000000000000)/(`Coin'_difficulty*e(b)[1,1] + e(b)[1,2]))*(24*60*2500)*`Coin'_exchangerate*0.90
+	disp e(r2)
+	gen `Coin'_fmv = ((``Coin'_scale')/(`Coin'_difficulty*e(b)[1,1] + e(b)[1,2]))*(24*60)*`Coin'_exchangerate*``Coin'_blockreward'*(1/``Coin'_blocktime')
+	gen `Coin'_pr = `Coin'_marketprice_eu / `Coin'_fmv
 	//gen `Coin'_magicnumber = `Coin'_marketprice / `Coin'_exchangerate
-	quietly count if `Coin'_profitbtc > 0
+	quietly count if `Coin'_pr < 0.90
 	disp "`Coin' % profitable: ", %3.1f 100 * r(N) / `total_obs'
 	gen abs_profit = abs(`Coin'_profitpct)
 	quietly summarize abs_profit

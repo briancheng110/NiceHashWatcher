@@ -29,7 +29,8 @@ market_stat_attribs = [
     'KurtosisMarketPrice',
     'SDMarketPrice',
     'LowerQuartileMarketPrice',
-    'UpperQuartileMarketPrice'
+    'UpperQuartileMarketPrice',
+    'MinMarketPrice'
 ]
 
 CoinUrlFile = 'File'
@@ -223,6 +224,7 @@ if __name__ == '__main__':
                         market_stats[Market].update({'SDMarketPrice': priceStats[0]})
                         market_stats[Market].update({'LowerQuartileMarketPrice': priceStats[0]})
                         market_stats[Market].update({'UpperQuartileMarketPrice': priceStats[0]})
+                        market_stats[Market].update({'MinMarketPrice': priceStats[0]})
                     else:
                         data_array = priceStats[Market]
                         quartiles = statistics.quantiles(data_array)
@@ -233,6 +235,7 @@ if __name__ == '__main__':
                         market_stats[Market].update({'SDMarketPrice': statistics.stdev(data_array)})
                         market_stats[Market].update({'LowerQuartileMarketPrice': quartiles[0]})
                         market_stats[Market].update({'UpperQuartileMarketPrice': quartiles[2]})
+                        market_stats[Market].update({'MinMarketPrice': min(data_array)})
                 except statistics.StatisticsError:
                     continue
             
@@ -291,6 +294,7 @@ if __name__ == '__main__':
                         csvOutput.write(str(market_stats[Market]['SDMarketPrice']) + ',')
                         csvOutput.write(str(market_stats[Market]['LowerQuartileMarketPrice']) + ',')
                         csvOutput.write(str(market_stats[Market]['UpperQuartileMarketPrice']) + ',')
+                        csvOutput.write(str(market_stats[Market]['MinMarketPrice']) + ',')
                     
     ##            pdb.set_trace()
             # explicit buffer flushing unnecessary -- flushed on close
