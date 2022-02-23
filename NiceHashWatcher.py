@@ -300,6 +300,5 @@ if __name__ == '__main__':
 
         with open(outputFile, mode='a') as csvOutput:
             csvOutput.write('\n')
-    ##    time.sleep(loopTime)
-        sys.exit()
+        time.sleep(loopTime)
         
