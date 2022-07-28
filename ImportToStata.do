@@ -7,7 +7,7 @@ local magic_number = 659670 // empirically determined exchange rate:market price
 
 import delim using "C:\Users\Brian\Desktop\Mining tools\NiceHashWatcher\Output.csv", varn(1) clear numericcols(2/197)
 drop if time == "Time"
-drop v512
+drop in 1574
 
 quietly count
 local total_obs = r(N)
@@ -51,11 +51,11 @@ foreach Coin of local Coins {
 	gen `Coin'_profitpct = 100 * `Coin'_profitbtc / 0.006
 	//calculate relationship between network hashrate and difficulty
 	quietly regress `Coin'_networkhashrate `Coin'_difficulty
-	disp e(r2)
+	disp e(b)[1,1], %28.0f e(b)[1,2],e(r2), e(r2)
 	gen `Coin'_fmv = ((``Coin'_scale')/(`Coin'_difficulty*e(b)[1,1] + e(b)[1,2]))*(24*60)*`Coin'_exchangerate*``Coin'_blockreward'*(1/``Coin'_blocktime')
-	gen `Coin'_pr = `Coin'_marketprice_eu / `Coin'_fmv
+	gen `Coin'_pr = `Coin'_minmarketprice_eu / `Coin'_fmv
 	//gen `Coin'_magicnumber = `Coin'_marketprice / `Coin'_exchangerate
-	quietly count if `Coin'_pr < 0.90
+	quietly count if `Coin'_pr < 0.95
 	disp "`Coin' % profitable: ", %3.1f 100 * r(N) / `total_obs'
 	gen abs_profit = abs(`Coin'_profitpct)
 	quietly summarize abs_profit
