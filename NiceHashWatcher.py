@@ -11,8 +11,7 @@ from scipy.stats import *
 # we need 5 things to make a full calculation:
 # Hashpower market price, BTC exchange rate, network hashrate, block time, and reward per block
 
-#CoinList = ['DASH', 'HNS','ERG', 'XMR', 'BTC', 'AE', 'ETH', 'BEAM', 'ZEC', 'BTG', 'CFX', 'RVN', 'BCD', 'BCH', 'BSV']
-CoinList = ['DOGE', 'LTC']
+CoinList = ['DASH', 'HNS','ERG', 'XMR', 'BTC', 'AE', 'ETH', 'BEAM', 'ZEC', 'BTG', 'CFX', 'RVN', 'BCD', 'BCH', 'BSV', 'DOGE', 'LTC']
 marketList = ['USA_E', 'EU', 'USA', 'EU_N']
 attributeList = [
     'ProfitBTC',

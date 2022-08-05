@@ -83,3 +83,15 @@ ExchangeTransfer-KuCoin,Pct,0,Native
 TradingFee-KuCoin,Pct,0.1,Native
 TransferToBTCWallet-KuCoin,Fixed,0.0005,Final
 -
+:DOGE
+PoolFee-Poolin,Pct,2,Native
+ExchangeTransfer-KuCoin,Pct,0,Native
+TradingFee-KuCoin,Pct,0.1,Native
+TransferToBTCWallet-KuCoin,Fixed,0.0005,Final
+-
+:LTC
+PoolFee-Poolin,Pct,2,Native
+ExchangeTransfer-KuCoin,Pct,0,Native
+TradingFee-KuCoin,Pct,0.1,Native
+TransferToBTCWallet-KuCoin,Fixed,0.0005,Final
+-
